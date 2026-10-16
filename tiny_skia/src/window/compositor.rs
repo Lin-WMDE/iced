@@ -199,12 +199,19 @@ pub fn present(
             Rectangle::with_size(viewport.logical_size()),
         );
 
-        let mut pixels = tiny_skia::PixmapMut::from_bytes(
+        // WMDE: the viewport can outgrow the buffer between `configure_surface` and here -
+        // an autosized window (panel applets, the Start menu) resizes itself while the
+        // interface updates, after `run_instance` has already configured the surface for the
+        // old size. `from_bytes` then finds the buffer too small and returns None. Report
+        // the surface as outdated instead of panicking: the caller reconfigures it for the
+        // current size and redraws.
+        let Some(mut pixels) = tiny_skia::PixmapMut::from_bytes(
             bytemuck::cast_slice_mut(&mut buffer),
             physical_size.width,
             physical_size.height,
-        )
-        .expect("Create pixel map");
+        ) else {
+            return Err(compositor::SurfaceError::Outdated);
+        };
 
         renderer.draw(
             &mut pixels,
